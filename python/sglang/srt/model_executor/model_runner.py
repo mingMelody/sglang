@@ -2279,6 +2279,11 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 server_args=self.server_args,
             )
 
+        can_run_piecewise_cuda_graph = bool(
+            self.piecewise_cuda_graph_runner is not None
+            and self.piecewise_cuda_graph_runner.can_run(forward_batch)
+        )
+
         if forward_batch.forward_mode.is_decode():
             ret = self.forward_decode(
                 forward_batch,
@@ -2290,6 +2295,12 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 forward_batch,
                 reinit_attn_backend=reinit_attn_backend,
                 forward_count=split_forward_count,
+            )
+        elif can_run_piecewise_cuda_graph:
+            ret = self.forward_extend(
+                forward_batch,
+                skip_attn_backend_init=skip_attn_backend_init,
+                pp_proxy_tensors=pp_proxy_tensors,
             )
         elif forward_batch.forward_mode.is_extend(include_draft_extend_v2=True):
             ret = self.forward_extend(

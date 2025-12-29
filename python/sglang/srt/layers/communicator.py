@@ -20,6 +20,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 
+from sglang.srt.compilation.piecewise_context_manager import is_in_piecewise_cuda_graph
 from sglang.srt.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
@@ -786,6 +787,10 @@ class CommunicateWithAllReduceAndLayerNormFn:
                 get_global_dp_buffer(),
                 hidden_states,
             )
+            if is_in_piecewise_cuda_graph():
+                length = local_hidden_states.shape[0] * get_attention_dp_size()
+                hidden_states = hidden_states[:length]
+
             dp_gather_partial(hidden_states, local_hidden_states, forward_batch)
 
             if not use_layer_norm_before_gather:
@@ -928,6 +933,11 @@ class CommunicateSummableTensorPairFn:
             get_local_dp_buffer(),
             hidden_states,
         )
+
+        if is_in_piecewise_cuda_graph():
+            length = global_hidden_states.shape[0] // get_attention_dp_size()
+            hidden_states = hidden_states[:length]
+
         if allow_reduce_scatter and forward_batch.dp_padding_mode.is_max_len():
             # When using padding, all_reduce is skipped after MLP and MOE and reduce scatter is used here instead.
             dp_reduce_scatter_tensor(hidden_states, global_hidden_states)
